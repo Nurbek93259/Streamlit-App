@@ -2,87 +2,100 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objs as go
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
 from datetime import datetime, timedelta
 
 # Set up Streamlit page configuration
-st.set_page_config(layout="wide", page_title="Cryptocurrency and Stock Comparison Tool")
+st.set_page_config(layout="wide", page_title="Stock Price Prediction App")
 
-# Sidebar inputs for user selection
-st.sidebar.title("Comparison Tool")
-stock_symbol = st.sidebar.text_input("Enter stock ticker symbol (e.g., AAPL):", "AAPL").upper()
-crypto_symbol = st.sidebar.text_input("Enter cryptocurrency symbol (e.g., BTC-USD):", "BTC-USD").upper()
-start_date = st.sidebar.date_input("Start Date", datetime.today() - timedelta(days=365))
+# Sidebar inputs
+st.sidebar.title("Stock Price Prediction")
+symbol = st.sidebar.text_input("Enter stock symbol (e.g., AAPL):", "AAPL").upper()
+start_date = st.sidebar.date_input("Start Date", datetime.today() - timedelta(days=365 * 5))
 end_date = st.sidebar.date_input("End Date", datetime.today())
 
 # Fetch stock data
-st.title("📊 Cryptocurrency and Stock Comparison Tool")
-st.write(f"Comparing **{stock_symbol}** (Stock) with **{crypto_symbol}** (Cryptocurrency)")
+st.title(f"📈 Stock Price Prediction for {symbol}")
+stock = yf.Ticker(symbol)
+data = stock.history(start=start_date, end=end_date)
 
-try:
-    # Fetch stock data
-    stock = yf.Ticker(stock_symbol)
-    stock_data = stock.history(start=start_date, end=end_date)
+if not data.empty:
+    # Display Candlestick Chart
+    st.subheader("Historical Price with Candlestick Chart")
+    fig = go.Figure(data=[go.Candlestick(
+        x=data.index,
+        open=data['Open'],
+        high=data['High'],
+        low=data['Low'],
+        close=data['Close'],
+        name='Candlestick'
+    )])
+    fig.update_layout(
+        title=f"{symbol} Price Candlestick Chart",
+        xaxis_title="Date",
+        yaxis_title="Price (USD)",
+        template="plotly_white"
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
-    # Fetch cryptocurrency data
-    crypto = yf.Ticker(crypto_symbol)
-    crypto_data = crypto.history(start=start_date, end=end_date)
+    # Prepare data for prediction model
+    data['Date'] = data.index
+    data['Date_ordinal'] = data['Date'].map(datetime.toordinal)  # Convert dates to ordinal numbers
 
-    # Check if data is retrieved
-    if not stock_data.empty and not crypto_data.empty:
-        # Rename columns for clarity
-        stock_data = stock_data[['Close']].rename(columns={"Close": f"{stock_symbol} Close"})
-        crypto_data = crypto_data[['Close']].rename(columns={"Close": f"{crypto_symbol} Close"})
+    # Define features and target
+    X = data[['Date_ordinal']]
+    y = data['Close']
 
-        # Merge stock and crypto data on date
-        combined_data = stock_data.join(crypto_data, how='inner')
+    # Split data into training and test sets
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-        # Display combined data
-        st.subheader("Historical Price Comparison")
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=combined_data.index, y=combined_data[f"{stock_symbol} Close"], mode='lines', name=f"{stock_symbol} (Stock)"))
-        fig.add_trace(go.Scatter(x=combined_data.index, y=combined_data[f"{crypto_symbol} Close"], mode='lines', name=f"{crypto_symbol} (Crypto)"))
-        fig.update_layout(
-            title="Stock vs Cryptocurrency Historical Price Comparison",
-            xaxis_title="Date",
-            yaxis_title="Price (USD)",
-            template="plotly_white"
-        )
-        st.plotly_chart(fig, use_container_width=True)
+    # Train Linear Regression model
+    model = LinearRegression()
+    model.fit(X_train, y_train)
 
-        # Calculate and display percentage returns
-        stock_return = ((combined_data[f"{stock_symbol} Close"].iloc[-1] - combined_data[f"{stock_symbol} Close"].iloc[0]) / combined_data[f"{stock_symbol} Close"].iloc[0]) * 100
-        crypto_return = ((combined_data[f"{crypto_symbol} Close"].iloc[-1] - combined_data[f"{crypto_symbol} Close"].iloc[0]) / combined_data[f"{crypto_symbol} Close"].iloc[0]) * 100
+    # Predict on test data
+    y_pred = model.predict(X_test)
 
-        st.subheader("Performance Comparison")
-        col1, col2 = st.columns(2)
-        col1.metric(f"{stock_symbol} Stock Return", f"{stock_return:.2f}%")
-        col2.metric(f"{crypto_symbol} Crypto Return", f"{crypto_return:.2f}%")
+    # Create DataFrame with test data and predictions
+    predictions = pd.DataFrame({'Date': X_test['Date_ordinal'], 'Actual': y_test, 'Predicted': y_pred})
+    predictions['Date'] = predictions['Date'].map(datetime.fromordinal)
+    predictions = predictions.sort_values(by="Date")
 
-        # Technical Indicators - Moving Averages
-        st.subheader("Technical Indicators")
-        combined_data[f"{stock_symbol} SMA_50"] = combined_data[f"{stock_symbol} Close"].rolling(window=50).mean()
-        combined_data[f"{crypto_symbol} SMA_50"] = combined_data[f"{crypto_symbol} Close"].rolling(window=50).mean()
+    # Display Prediction Results
+    st.subheader("Model Prediction vs Actual")
+    fig_pred = go.Figure()
+    fig_pred.add_trace(go.Scatter(x=predictions['Date'], y=predictions['Actual'], mode="lines", name="Actual Price"))
+    fig_pred.add_trace(go.Scatter(x=predictions['Date'], y=predictions['Predicted'], mode="lines", name="Predicted Price"))
+    fig_pred.update_layout(
+        title=f"{symbol} Price Prediction",
+        xaxis_title="Date",
+        yaxis_title="Price (USD)",
+        template="plotly_white"
+    )
+    st.plotly_chart(fig_pred, use_container_width=True)
 
-        fig_ma = go.Figure()
-        fig_ma.add_trace(go.Scatter(x=combined_data.index, y=combined_data[f"{stock_symbol} Close"], mode="lines", name=f"{stock_symbol} Close"))
-        fig_ma.add_trace(go.Scatter(x=combined_data.index, y=combined_data[f"{crypto_symbol} Close"], mode="lines", name=f"{crypto_symbol} Close"))
-        fig_ma.add_trace(go.Scatter(x=combined_data.index, y=combined_data[f"{stock_symbol} SMA_50"], mode="lines", name=f"{stock_symbol} 50-Day SMA"))
-        fig_ma.add_trace(go.Scatter(x=combined_data.index, y=combined_data[f"{crypto_symbol} SMA_50"], mode="lines", name=f"{crypto_symbol} 50-Day SMA"))
+    # Future Predictions
+    st.subheader("Future Price Prediction")
+    days_ahead = st.slider("Days ahead to predict:", min_value=1, max_value=365, value=30)
+    future_dates = pd.date_range(end_date + timedelta(days=1), periods=days_ahead).to_list()
+    future_ordinals = [[date.toordinal()] for date in future_dates]
+    future_predictions = model.predict(future_ordinals)
 
-        fig_ma.update_layout(
-            title="50-Day Moving Average Comparison",
-            xaxis_title="Date",
-            yaxis_title="Price (USD)",
-            template="plotly_white"
-        )
-        st.plotly_chart(fig_ma, use_container_width=True)
+    # Display Future Prediction Results
+    future_df = pd.DataFrame({"Date": future_dates, "Predicted Price": future_predictions})
+    fig_future = go.Figure()
+    fig_future.add_trace(go.Scatter(x=future_df['Date'], y=future_df['Predicted Price'], mode="lines", name="Predicted Future Price"))
+    fig_future.update_layout(
+        title=f"Predicted Future Prices for {symbol}",
+        xaxis_title="Date",
+        yaxis_title="Price (USD)",
+        template="plotly_white"
+    )
+    st.plotly_chart(fig_future, use_container_width=True)
 
-        # Display combined data table
-        st.subheader("Combined Historical Data Table")
-        st.dataframe(combined_data)
+    # Display future prediction data
+    st.dataframe(future_df)
 
-    else:
-        st.error("Could not retrieve data for the stock or cryptocurrency symbols provided.")
-
-except Exception as e:
-    st.error(f"An error occurred: {e}")
+else:
+    st.error("No data found for the specified stock symbol and date range.")
