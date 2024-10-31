@@ -1,38 +1,95 @@
 import streamlit as st
-import matplotlib.pyplot as plt
-import datetime
-import plotly.graph_objs as go
-
-import appdirs as ad
-ad.user_cache_dir = lambda *args: "/tmp"
 import yfinance as yf
+import pandas as pd
+import requests
+import plotly.graph_objs as go
+from datetime import datetime
 
-# Specify title and logo for the webpage.
-# Set up your web app
-st.set_page_config(layout="wide", page_title="WebApp_Demo")
+# Set up the Streamlit page configuration
+st.set_page_config(layout="wide", page_title="Financial News & Stock Analysis Platform")
 
-# Sidebar
-st.sidebar.title("Input")
-symbol = st.sidebar.text_input('Please enter the stock symbol: ', 'NVDA').upper()
-# Selection for a specific time frame.
-col1, col2 = st.sidebar.columns(2, gap="medium")
-with col1:
-    sdate = st.date_input('Start Date',value=datetime.date(2024,1,1))
-with col2:
-    edate = st.date_input('End Date',value=datetime.date.today())
+# Sidebar inputs
+st.sidebar.title("Search for a Stock")
+symbol = st.sidebar.text_input("Enter stock symbol (e.g., AAPL):", "AAPL").upper()
 
-st.title(f"{symbol}")
+# Define the date range for historical data
+start_date = st.sidebar.date_input("Start Date", datetime(2023, 1, 1))
+end_date = st.sidebar.date_input("End Date", datetime.today())
 
+# API key for news data
+news_api_key = "YOUR_NEWS_API_KEY"  # Replace with your actual NewsAPI key
+
+# Fetch stock data
+st.title(f"📈 Financial Analysis for {symbol}")
 stock = yf.Ticker(symbol)
-if stock is not None:
-  # Display company's basics
-  st.write(f"# Sector : {stock.info['sector']}")
-  st.write(f"# Company Beta : {stock.info['beta']}")
-else:
-  st.error("Failed to fetch historical data.")
 
-data = yf.download(symbol,start=sdate,end=edate)
-if data is not None:
-  st.line_chart(data['Close'],x_label="Date",y_label="Close")
-else:
-    st.error("Failed to fetch historical data.")
+try:
+    # Display company information
+    info = stock.info
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Sector", info.get("sector", "N/A"))
+    col2.metric("Market Cap", f"${info.get('marketCap', 'N/A'):,}")
+    col3.metric("52-Week High", f"${info.get('fiftyTwoWeekHigh', 'N/A')}")
+    col1.metric("52-Week Low", f"${info.get('fiftyTwoWeekLow', 'N/A')}")
+    col2.metric("Dividend Yield", f"{info.get('dividendYield', 'N/A'):.2%}")
+    col3.metric("Beta", info.get("beta", "N/A"))
+
+    # Fetch historical data for the selected date range
+    data = stock.history(start=start_date, end=end_date)
+
+    # Plot historical price data
+    st.subheader("Stock Price History")
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=data.index, y=data['Close'], mode="lines", name="Close Price"))
+    fig.update_layout(
+        title=f"{symbol} Stock Price",
+        xaxis_title="Date",
+        yaxis_title="Close Price (USD)",
+        template="plotly_white"
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    # Display technical indicators (Moving Averages)
+    st.subheader("Technical Indicators")
+    data["SMA_50"] = data["Close"].rolling(window=50).mean()  # 50-day Simple Moving Average
+    data["EMA_20"] = data["Close"].ewm(span=20, adjust=False).mean()  # 20-day Exponential Moving Average
+    
+    fig_indicators = go.Figure()
+    fig_indicators.add_trace(go.Scatter(x=data.index, y=data['Close'], mode="lines", name="Close Price"))
+    fig_indicators.add_trace(go.Scatter(x=data.index, y=data["SMA_50"], mode="lines", name="50-Day SMA"))
+    fig_indicators.add_trace(go.Scatter(x=data.index, y=data["EMA_20"], mode="lines", name="20-Day EMA"))
+    fig_indicators.update_layout(
+        title=f"{symbol} with Moving Averages",
+        xaxis_title="Date",
+        yaxis_title="Price (USD)",
+        template="plotly_white"
+    )
+    st.plotly_chart(fig_indicators, use_container_width=True)
+
+    # Show historical data as a table
+    st.subheader("Historical Data")
+    st.dataframe(data[['Open', 'High', 'Low', 'Close', 'Volume']])
+
+except Exception as e:
+    st.error(f"An error occurred while fetching stock data: {e}")
+
+# Fetch financial news articles
+st.header("📰 Latest Financial News")
+
+try:
+    news_url = f"https://newsapi.org/v2/everything?q={symbol}&apiKey={news_api_key}&sortBy=publishedAt"
+    response = requests.get(news_url)
+    news_data = response.json()
+
+    if news_data["status"] == "ok":
+        articles = news_data["articles"][:5]  # Display top 5 articles
+        for article in articles:
+            st.subheader(article["title"])
+            st.write(article["description"])
+            st.markdown(f"[Read more]({article['url']})")
+            st.write("---")
+    else:
+        st.error("Failed to fetch news articles.")
+
+except Exception as e:
+    st.error(f"An error occurred while fetching news: {e}")
