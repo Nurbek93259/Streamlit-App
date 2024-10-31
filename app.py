@@ -85,7 +85,7 @@ try:
             st.markdown(f"[Read more]({article['link']})")
             st.write("---")
     else:
-        st.write("No news articles found for this stock.")
+        st.write("No recent news articles available for this stock at the moment.")
 
 except Exception as e:
-    st.error(f"An error occurred while fetching news: {e}")
+    st.write("Unable to retrieve news at this time. Please try again later.")
