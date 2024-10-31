@@ -58,8 +58,12 @@ if not data.empty:
     y_pred = model.predict(X_test)
 
     # Create DataFrame with test data and predictions
-    predictions = pd.DataFrame({'Date': X_test['Date_ordinal'], 'Actual': y_test, 'Predicted': y_pred})
-    predictions['Date'] = predictions['Date'].map(datetime.fromordinal)
+    predictions = pd.DataFrame({'Date_ordinal': X_test['Date_ordinal'], 'Actual': y_test, 'Predicted': y_pred})
+
+    # Convert ordinals back to dates
+    predictions['Date'] = predictions['Date_ordinal'].map(datetime.fromordinal)
+
+    # Sort predictions by date
     predictions = predictions.sort_values(by="Date")
 
     # Display Prediction Results
