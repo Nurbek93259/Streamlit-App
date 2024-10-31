@@ -1,7 +1,6 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import requests
 import plotly.graph_objs as go
 from datetime import datetime
 
@@ -15,9 +14,6 @@ symbol = st.sidebar.text_input("Enter stock symbol (e.g., AAPL):", "AAPL").upper
 # Define the date range for historical data
 start_date = st.sidebar.date_input("Start Date", datetime(2023, 1, 1))
 end_date = st.sidebar.date_input("End Date", datetime.today())
-
-# API key for news data
-news_api_key = "YOUR_NEWS_API_KEY"  # Replace with your actual NewsAPI key
 
 # Fetch stock data
 st.title(f"📈 Financial Analysis for {symbol}")
@@ -73,23 +69,23 @@ try:
 except Exception as e:
     st.error(f"An error occurred while fetching stock data: {e}")
 
-# Fetch financial news articles
+# Fetch financial news articles from Yahoo Finance
 st.header("📰 Latest Financial News")
 
 try:
-    news_url = f"https://newsapi.org/v2/everything?q={symbol}&apiKey={news_api_key}&sortBy=publishedAt"
-    response = requests.get(news_url)
-    news_data = response.json()
-
-    if news_data["status"] == "ok":
-        articles = news_data["articles"][:5]  # Display top 5 articles
+    news_data = stock.news  # Fetches news directly from Yahoo Finance using yfinance
+    articles = news_data[:5]  # Display top 5 articles
+    
+    if articles:
         for article in articles:
             st.subheader(article["title"])
-            st.write(article["description"])
-            st.markdown(f"[Read more]({article['url']})")
+            st.write(f"Source: {article['publisher']}")
+            publish_time = datetime.fromtimestamp(article["providerPublishTime"]).strftime('%Y-%m-%d %H:%M:%S')
+            st.write(f"Published at: {publish_time}")
+            st.markdown(f"[Read more]({article['link']})")
             st.write("---")
     else:
-        st.error("Failed to fetch news articles.")
+        st.write("No news articles found for this stock.")
 
 except Exception as e:
     st.error(f"An error occurred while fetching news: {e}")
