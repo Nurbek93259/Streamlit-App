@@ -1,105 +1,78 @@
 import streamlit as st
-import yfinance as yf
 import pandas as pd
-import plotly.graph_objs as go
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LinearRegression
-from datetime import datetime, timedelta
 
 # Set up Streamlit page configuration
-st.set_page_config(layout="wide", page_title="Stock Price Prediction App")
+st.set_page_config(page_title="Ivy League Universities Information", layout="wide")
 
-# Sidebar inputs
-st.sidebar.title("Stock Price Prediction")
-symbol = st.sidebar.text_input("Enter stock symbol (e.g., AAPL):", "AAPL").upper()
-start_date = st.sidebar.date_input("Start Date", datetime.today() - timedelta(days=365 * 5))
-end_date = st.sidebar.date_input("End Date", datetime.today())
+# Page title
+st.title("📚 Ivy League Universities Information")
 
-# Fetch stock data
-st.title(f"📈 Stock Price Prediction for {symbol}")
-stock = yf.Ticker(symbol)
-data = stock.history(start=start_date, end=end_date)
+# Ivy League universities data
+ivy_league_data = {
+    "University": [
+        "Harvard University", "Yale University", "Princeton University", "Columbia University",
+        "University of Pennsylvania", "Dartmouth College", "Brown University", "Cornell University"
+    ],
+    "Location": [
+        "Cambridge, MA", "New Haven, CT", "Princeton, NJ", "New York, NY",
+        "Philadelphia, PA", "Hanover, NH", "Providence, RI", "Ithaca, NY"
+    ],
+    "Acceptance Rate": [3.4, 4.6, 3.8, 5.1, 5.9, 7.9, 6.9, 10.7],
+    "Undergraduate Enrollment": [6980, 6249, 5310, 8610, 10495, 4321, 7322, 15043],
+    "Tuition (2024)": [
+        "$57,246", "$64,700", "$57,410", "$65,524", "$63,452", "$63,984", "$65,696", "$63,200"
+    ],
+    "Notable Alumni": [
+        "Mark Zuckerberg, Barack Obama", "George H.W. Bush, Jodie Foster", 
+        "Michelle Obama, Jeff Bezos", "Ruth Bader Ginsburg, Warren Buffett", 
+        "Elon Musk, Donald Trump", "Nelson Rockefeller, Dr. Seuss",
+        "Emma Watson, John F. Kennedy Jr.", "Ruth Bader Ginsburg, Toni Morrison"
+    ]
+}
 
-if not data.empty:
-    # Display Candlestick Chart
-    st.subheader("Historical Price with Candlestick Chart")
-    fig = go.Figure(data=[go.Candlestick(
-        x=data.index,
-        open=data['Open'],
-        high=data['High'],
-        low=data['Low'],
-        close=data['Close'],
-        name='Candlestick'
-    )])
-    fig.update_layout(
-        title=f"{symbol} Price Candlestick Chart",
-        xaxis_title="Date",
-        yaxis_title="Price (USD)",
-        template="plotly_white"
-    )
-    st.plotly_chart(fig, use_container_width=True)
+# Convert data to DataFrame
+df_ivy = pd.DataFrame(ivy_league_data)
 
-    # Prepare data for prediction model
-    data['Date'] = data.index
-    data['Date_ordinal'] = data['Date'].map(datetime.toordinal)  # Convert dates to ordinal numbers
+# Sidebar filters
+st.sidebar.title("Filter Universities")
+min_acceptance_rate = st.sidebar.slider("Maximum Acceptance Rate (%)", min_value=1.0, max_value=15.0, value=10.0)
+min_undergrad_enrollment = st.sidebar.slider("Minimum Undergraduate Enrollment", min_value=1000, max_value=20000, value=5000)
 
-    # Define features and target
-    X = data[['Date_ordinal']]
-    y = data['Close']
+# Filter data based on sidebar inputs
+filtered_df = df_ivy[
+    (df_ivy["Acceptance Rate"] <= min_acceptance_rate) &
+    (df_ivy["Undergraduate Enrollment"] >= min_undergrad_enrollment)
+]
 
-    # Split data into training and test sets
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+# Display filtered data
+st.subheader("Ivy League Universities Information")
+st.dataframe(filtered_df)
 
-    # Train Linear Regression model
-    model = LinearRegression()
-    model.fit(X_train, y_train)
+# Display individual university details
+st.sidebar.title("University Details")
+selected_university = st.sidebar.selectbox("Select a university", df_ivy["University"])
 
-    # Predict on test data
-    y_pred = model.predict(X_test)
+st.sidebar.subheader(f"Details for {selected_university}")
+university_info = df_ivy[df_ivy["University"] == selected_university].iloc[0]
 
-    # Create DataFrame with test data and predictions
-    predictions = pd.DataFrame({'Date_ordinal': X_test['Date_ordinal'], 'Actual': y_test, 'Predicted': y_pred})
+st.sidebar.write(f"**Location:** {university_info['Location']}")
+st.sidebar.write(f"**Acceptance Rate:** {university_info['Acceptance Rate']}%")
+st.sidebar.write(f"**Undergraduate Enrollment:** {university_info['Undergraduate Enrollment']}")
+st.sidebar.write(f"**Tuition (2024):** {university_info['Tuition (2024)']}")
+st.sidebar.write(f"**Notable Alumni:** {university_info['Notable Alumni']}")
 
-    # Convert ordinals back to dates
-    predictions['Date'] = predictions['Date_ordinal'].map(datetime.fromordinal)
+# Charts for visual representation
+st.subheader("Acceptance Rate and Enrollment Comparison")
 
-    # Sort predictions by date
-    predictions = predictions.sort_values(by="Date")
+# Bar chart for acceptance rate
+st.write("### Acceptance Rate Comparison")
+st.bar_chart(df_ivy.set_index("University")["Acceptance Rate"])
 
-    # Display Prediction Results
-    st.subheader("Model Prediction vs Actual")
-    fig_pred = go.Figure()
-    fig_pred.add_trace(go.Scatter(x=predictions['Date'], y=predictions['Actual'], mode="lines", name="Actual Price"))
-    fig_pred.add_trace(go.Scatter(x=predictions['Date'], y=predictions['Predicted'], mode="lines", name="Predicted Price"))
-    fig_pred.update_layout(
-        title=f"{symbol} Price Prediction",
-        xaxis_title="Date",
-        yaxis_title="Price (USD)",
-        template="plotly_white"
-    )
-    st.plotly_chart(fig_pred, use_container_width=True)
+# Bar chart for undergraduate enrollment
+st.write("### Undergraduate Enrollment Comparison")
+st.bar_chart(df_ivy.set_index("University")["Undergraduate Enrollment"])
 
-    # Future Predictions
-    st.subheader("Future Price Prediction")
-    days_ahead = st.slider("Days ahead to predict:", min_value=1, max_value=365, value=30)
-    future_dates = pd.date_range(end_date + timedelta(days=1), periods=days_ahead).to_list()
-    future_ordinals = [[date.toordinal()] for date in future_dates]
-    future_predictions = model.predict(future_ordinals)
-
-    # Display Future Prediction Results
-    future_df = pd.DataFrame({"Date": future_dates, "Predicted Price": future_predictions})
-    fig_future = go.Figure()
-    fig_future.add_trace(go.Scatter(x=future_df['Date'], y=future_df['Predicted Price'], mode="lines", name="Predicted Future Price"))
-    fig_future.update_layout(
-        title=f"Predicted Future Prices for {symbol}",
-        xaxis_title="Date",
-        yaxis_title="Price (USD)",
-        template="plotly_white"
-    )
-    st.plotly_chart(fig_future, use_container_width=True)
-
-    # Display future prediction data
-    st.dataframe(future_df)
-
-else:
-    st.error("No data found for the specified stock symbol and date range.")
+# Tuition bar chart
+st.write("### Tuition Fees Comparison (2024)")
+tuition_fees = df_ivy.set_index("University")["Tuition (2024)"].replace('[\$,]', '', regex=True).astype(float)
+st.bar_chart(tuition_fees)
