@@ -1,5 +1,2 @@
 streamlit
-yfinance
-plotly
 pandas
-scikit-learn
