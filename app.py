@@ -1,103 +1,95 @@
 import streamlit as st
-import pandas as pd
 import yfinance as yf
+import pandas as pd
 import requests
 import plotly.graph_objs as go
 from datetime import datetime
 
-# Set up page configuration
-st.set_page_config(layout="wide", page_title="Economic Indicator Dashboard")
+# Set up the Streamlit page configuration
+st.set_page_config(layout="wide", page_title="Financial News & Stock Analysis Platform")
 
-# Sidebar inputs for currency and stock index selection
-st.sidebar.title("Dashboard Options")
-currency_pair = st.sidebar.selectbox("Select Currency Pair", ["JPY-USD", "EUR-USD", "GBP-USD"])
-index_selection = st.sidebar.multiselect(
-    "Select Stock Indices", ["S&P 500", "NASDAQ", "DOW JONES"],
-    ["S&P 500", "NASDAQ"]
-)
+# Sidebar inputs
+st.sidebar.title("Search for a Stock")
+symbol = st.sidebar.text_input("Enter stock symbol (e.g., AAPL):", "AAPL").upper()
 
-# Define stock indices tickers (Yahoo Finance tickers)
-index_tickers = {
-    "S&P 500": "^GSPC",
-    "NASDAQ": "^IXIC",
-    "DOW JONES": "^DJI"
-}
+# Define the date range for historical data
+start_date = st.sidebar.date_input("Start Date", datetime(2023, 1, 1))
+end_date = st.sidebar.date_input("End Date", datetime.today())
 
-# API keys
-currency_api_key = "YOUR_EXCHANGERATE_API_KEY"  # Exchange Rate API key for currency data
-# Placeholder example economic data
-sample_economic_data = {
-    "GDP Growth (%)": 3.2,
-    "Inflation Rate (%)": 2.1,
-    "Unemployment Rate (%)": 5.2,
-    "Interest Rate (%)": 1.5
-}
+# API key for news data
+news_api_key = "YOUR_NEWS_API_KEY"  # Replace with your actual NewsAPI key
 
-# Title for the dashboard
-st.title("📈 Economic Indicator Dashboard")
+# Fetch stock data
+st.title(f"📈 Financial Analysis for {symbol}")
+stock = yf.Ticker(symbol)
 
-# Fetch and display stock index data
-st.header("📊 Stock Indices")
-index_data = {}
-for index in index_selection:
-    ticker_symbol = index_tickers[index]
-    stock_data = yf.Ticker(ticker_symbol).history(period="1y")
-    index_data[index] = stock_data
-
-    # Plot index data
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=stock_data.index, y=stock_data['Close'], mode="lines", name=index))
-    fig.update_layout(
-        title=f"{index} - Last Year Performance",
-        xaxis_title="Date",
-        yaxis_title="Index Price (USD)",
-        template="plotly_white"
-    )
-    st.plotly_chart(fig, use_container_width=True)
-
-# Fetch and display currency exchange rate data
-st.header("💱 Currency Exchange Rate")
 try:
-    currency_url = f"https://v6.exchangerate-api.com/v6/{currency_api_key}/pair/{currency_pair.split('-')[0]}/{currency_pair.split('-')[1]}"
-    currency_data = requests.get(currency_url).json()
-    
-    if currency_data.get("result") == "success":
-        conversion_rate = currency_data["conversion_rate"]
-        st.metric(f"Exchange Rate {currency_pair}", f"{conversion_rate} {currency_pair.split('-')[1]}")
-    else:
-        st.error("Failed to fetch currency data.")
-except Exception as e:
-    st.error(f"An error occurred while fetching currency data: {e}")
+    # Display company information
+    info = stock.info
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Sector", info.get("sector", "N/A"))
+    col2.metric("Market Cap", f"${info.get('marketCap', 'N/A'):,}")
+    col3.metric("52-Week High", f"${info.get('fiftyTwoWeekHigh', 'N/A')}")
+    col1.metric("52-Week Low", f"${info.get('fiftyTwoWeekLow', 'N/A')}")
+    col2.metric("Dividend Yield", f"{info.get('dividendYield', 'N/A'):.2%}")
+    col3.metric("Beta", info.get("beta", "N/A"))
 
-# Display Economic Indicators
-st.header("📉 Economic Indicators")
-st.write("Real-time indicators for economic health:")
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("GDP Growth (%)", f"{sample_economic_data['GDP Growth (%)']}%")
-col2.metric("Inflation Rate (%)", f"{sample_economic_data['Inflation Rate (%)']}%")
-col3.metric("Unemployment Rate (%)", f"{sample_economic_data['Unemployment Rate (%)']}%")
-col4.metric("Interest Rate (%)", f"{sample_economic_data['Interest Rate (%)']}%")
+    # Fetch historical data for the selected date range
+    data = stock.history(start=start_date, end=end_date)
 
-# Additional options for economic indicator trend plotting
-st.header("📅 Economic Indicator Trends")
-show_trend = st.checkbox("Show Trends for Economic Indicators (Simulated Data)")
-
-if show_trend:
-    # Simulated data for trend visualization
-    date_range = pd.date_range(start="2023-01-01", end=datetime.today(), freq="M")
-    gdp_growth = [3.2 + (0.1 * i) for i in range(len(date_range))]
-    inflation_rate = [2.1 + (0.05 * i) for i in range(len(date_range))]
-    unemployment_rate = [5.2 - (0.02 * i) for i in range(len(date_range))]
-
+    # Plot historical price data
+    st.subheader("Stock Price History")
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=date_range, y=gdp_growth, mode="lines+markers", name="GDP Growth (%)"))
-    fig.add_trace(go.Scatter(x=date_range, y=inflation_rate, mode="lines+markers", name="Inflation Rate (%)"))
-    fig.add_trace(go.Scatter(x=date_range, y=unemployment_rate, mode="lines+markers", name="Unemployment Rate (%)"))
-    
+    fig.add_trace(go.Scatter(x=data.index, y=data['Close'], mode="lines", name="Close Price"))
     fig.update_layout(
-        title="Trends for Simulated Economic Indicators",
+        title=f"{symbol} Stock Price",
         xaxis_title="Date",
-        yaxis_title="Percentage (%)",
+        yaxis_title="Close Price (USD)",
         template="plotly_white"
     )
     st.plotly_chart(fig, use_container_width=True)
+
+    # Display technical indicators (Moving Averages)
+    st.subheader("Technical Indicators")
+    data["SMA_50"] = data["Close"].rolling(window=50).mean()  # 50-day Simple Moving Average
+    data["EMA_20"] = data["Close"].ewm(span=20, adjust=False).mean()  # 20-day Exponential Moving Average
+    
+    fig_indicators = go.Figure()
+    fig_indicators.add_trace(go.Scatter(x=data.index, y=data['Close'], mode="lines", name="Close Price"))
+    fig_indicators.add_trace(go.Scatter(x=data.index, y=data["SMA_50"], mode="lines", name="50-Day SMA"))
+    fig_indicators.add_trace(go.Scatter(x=data.index, y=data["EMA_20"], mode="lines", name="20-Day EMA"))
+    fig_indicators.update_layout(
+        title=f"{symbol} with Moving Averages",
+        xaxis_title="Date",
+        yaxis_title="Price (USD)",
+        template="plotly_white"
+    )
+    st.plotly_chart(fig_indicators, use_container_width=True)
+
+    # Show historical data as a table
+    st.subheader("Historical Data")
+    st.dataframe(data[['Open', 'High', 'Low', 'Close', 'Volume']])
+
+except Exception as e:
+    st.error(f"An error occurred while fetching stock data: {e}")
+
+# Fetch financial news articles
+st.header("📰 Latest Financial News")
+
+try:
+    news_url = f"https://newsapi.org/v2/everything?q={symbol}&apiKey={news_api_key}&sortBy=publishedAt"
+    response = requests.get(news_url)
+    news_data = response.json()
+
+    if news_data["status"] == "ok":
+        articles = news_data["articles"][:5]  # Display top 5 articles
+        for article in articles:
+            st.subheader(article["title"])
+            st.write(article["description"])
+            st.markdown(f"[Read more]({article['url']})")
+            st.write("---")
+    else:
+        st.error("Failed to fetch news articles.")
+
+except Exception as e:
+    st.error(f"An error occurred while fetching news: {e}")
