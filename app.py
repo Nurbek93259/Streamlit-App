@@ -2,90 +2,87 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objs as go
-from datetime import datetime
+from datetime import datetime, timedelta
 
-# Set up the Streamlit page configuration
-st.set_page_config(layout="wide", page_title="Financial News & Stock Analysis Platform")
+# Set up Streamlit page configuration
+st.set_page_config(layout="wide", page_title="Cryptocurrency and Stock Comparison Tool")
 
-# Sidebar inputs
-st.sidebar.title("Search for a Stock")
-symbol = st.sidebar.text_input("Enter stock symbol (e.g., AAPL):", "AAPL").upper()
-
-# Define the date range for historical data
-start_date = st.sidebar.date_input("Start Date", datetime(2023, 1, 1))
+# Sidebar inputs for user selection
+st.sidebar.title("Comparison Tool")
+stock_symbol = st.sidebar.text_input("Enter stock ticker symbol (e.g., AAPL):", "AAPL").upper()
+crypto_symbol = st.sidebar.text_input("Enter cryptocurrency symbol (e.g., BTC-USD):", "BTC-USD").upper()
+start_date = st.sidebar.date_input("Start Date", datetime.today() - timedelta(days=365))
 end_date = st.sidebar.date_input("End Date", datetime.today())
 
 # Fetch stock data
-st.title(f"📈 Financial Analysis for {symbol}")
-stock = yf.Ticker(symbol)
+st.title("📊 Cryptocurrency and Stock Comparison Tool")
+st.write(f"Comparing **{stock_symbol}** (Stock) with **{crypto_symbol}** (Cryptocurrency)")
 
 try:
-    # Display company information
-    info = stock.info
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Sector", info.get("sector", "N/A"))
-    col2.metric("Market Cap", f"${info.get('marketCap', 'N/A'):,}")
-    col3.metric("52-Week High", f"${info.get('fiftyTwoWeekHigh', 'N/A')}")
-    col1.metric("52-Week Low", f"${info.get('fiftyTwoWeekLow', 'N/A')}")
-    col2.metric("Dividend Yield", f"{info.get('dividendYield', 'N/A'):.2%}")
-    col3.metric("Beta", info.get("beta", "N/A"))
+    # Fetch stock data
+    stock = yf.Ticker(stock_symbol)
+    stock_data = stock.history(start=start_date, end=end_date)
 
-    # Fetch historical data for the selected date range
-    data = stock.history(start=start_date, end=end_date)
+    # Fetch cryptocurrency data
+    crypto = yf.Ticker(crypto_symbol)
+    crypto_data = crypto.history(start=start_date, end=end_date)
 
-    # Plot historical price data
-    st.subheader("Stock Price History")
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=data.index, y=data['Close'], mode="lines", name="Close Price"))
-    fig.update_layout(
-        title=f"{symbol} Stock Price",
-        xaxis_title="Date",
-        yaxis_title="Close Price (USD)",
-        template="plotly_white"
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    # Check if data is retrieved
+    if not stock_data.empty and not crypto_data.empty:
+        # Rename columns for clarity
+        stock_data = stock_data[['Close']].rename(columns={"Close": f"{stock_symbol} Close"})
+        crypto_data = crypto_data[['Close']].rename(columns={"Close": f"{crypto_symbol} Close"})
 
-    # Display technical indicators (Moving Averages)
-    st.subheader("Technical Indicators")
-    data["SMA_50"] = data["Close"].rolling(window=50).mean()  # 50-day Simple Moving Average
-    data["EMA_20"] = data["Close"].ewm(span=20, adjust=False).mean()  # 20-day Exponential Moving Average
-    
-    fig_indicators = go.Figure()
-    fig_indicators.add_trace(go.Scatter(x=data.index, y=data['Close'], mode="lines", name="Close Price"))
-    fig_indicators.add_trace(go.Scatter(x=data.index, y=data["SMA_50"], mode="lines", name="50-Day SMA"))
-    fig_indicators.add_trace(go.Scatter(x=data.index, y=data["EMA_20"], mode="lines", name="20-Day EMA"))
-    fig_indicators.update_layout(
-        title=f"{symbol} with Moving Averages",
-        xaxis_title="Date",
-        yaxis_title="Price (USD)",
-        template="plotly_white"
-    )
-    st.plotly_chart(fig_indicators, use_container_width=True)
+        # Merge stock and crypto data on date
+        combined_data = stock_data.join(crypto_data, how='inner')
 
-    # Show historical data as a table
-    st.subheader("Historical Data")
-    st.dataframe(data[['Open', 'High', 'Low', 'Close', 'Volume']])
+        # Display combined data
+        st.subheader("Historical Price Comparison")
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=combined_data.index, y=combined_data[f"{stock_symbol} Close"], mode='lines', name=f"{stock_symbol} (Stock)"))
+        fig.add_trace(go.Scatter(x=combined_data.index, y=combined_data[f"{crypto_symbol} Close"], mode='lines', name=f"{crypto_symbol} (Crypto)"))
+        fig.update_layout(
+            title="Stock vs Cryptocurrency Historical Price Comparison",
+            xaxis_title="Date",
+            yaxis_title="Price (USD)",
+            template="plotly_white"
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
-except Exception as e:
-    st.error(f"An error occurred while fetching stock data: {e}")
+        # Calculate and display percentage returns
+        stock_return = ((combined_data[f"{stock_symbol} Close"].iloc[-1] - combined_data[f"{stock_symbol} Close"].iloc[0]) / combined_data[f"{stock_symbol} Close"].iloc[0]) * 100
+        crypto_return = ((combined_data[f"{crypto_symbol} Close"].iloc[-1] - combined_data[f"{crypto_symbol} Close"].iloc[0]) / combined_data[f"{crypto_symbol} Close"].iloc[0]) * 100
 
-# Fetch financial news articles from Yahoo Finance
-st.header("📰 Latest Financial News")
+        st.subheader("Performance Comparison")
+        col1, col2 = st.columns(2)
+        col1.metric(f"{stock_symbol} Stock Return", f"{stock_return:.2f}%")
+        col2.metric(f"{crypto_symbol} Crypto Return", f"{crypto_return:.2f}%")
 
-try:
-    news_data = stock.news  # Fetches news directly from Yahoo Finance using yfinance
-    articles = news_data[:5]  # Display top 5 articles
-    
-    if articles:
-        for article in articles:
-            st.subheader(article["title"])
-            st.write(f"Source: {article['publisher']}")
-            publish_time = datetime.fromtimestamp(article["providerPublishTime"]).strftime('%Y-%m-%d %H:%M:%S')
-            st.write(f"Published at: {publish_time}")
-            st.markdown(f"[Read more]({article['link']})")
-            st.write("---")
+        # Technical Indicators - Moving Averages
+        st.subheader("Technical Indicators")
+        combined_data[f"{stock_symbol} SMA_50"] = combined_data[f"{stock_symbol} Close"].rolling(window=50).mean()
+        combined_data[f"{crypto_symbol} SMA_50"] = combined_data[f"{crypto_symbol} Close"].rolling(window=50).mean()
+
+        fig_ma = go.Figure()
+        fig_ma.add_trace(go.Scatter(x=combined_data.index, y=combined_data[f"{stock_symbol} Close"], mode="lines", name=f"{stock_symbol} Close"))
+        fig_ma.add_trace(go.Scatter(x=combined_data.index, y=combined_data[f"{crypto_symbol} Close"], mode="lines", name=f"{crypto_symbol} Close"))
+        fig_ma.add_trace(go.Scatter(x=combined_data.index, y=combined_data[f"{stock_symbol} SMA_50"], mode="lines", name=f"{stock_symbol} 50-Day SMA"))
+        fig_ma.add_trace(go.Scatter(x=combined_data.index, y=combined_data[f"{crypto_symbol} SMA_50"], mode="lines", name=f"{crypto_symbol} 50-Day SMA"))
+
+        fig_ma.update_layout(
+            title="50-Day Moving Average Comparison",
+            xaxis_title="Date",
+            yaxis_title="Price (USD)",
+            template="plotly_white"
+        )
+        st.plotly_chart(fig_ma, use_container_width=True)
+
+        # Display combined data table
+        st.subheader("Combined Historical Data Table")
+        st.dataframe(combined_data)
+
     else:
-        st.write("No recent news articles available for this stock at the moment.")
+        st.error("Could not retrieve data for the stock or cryptocurrency symbols provided.")
 
 except Exception as e:
-    st.write("Unable to retrieve news at this time. Please try again later.")
+    st.error(f"An error occurred: {e}")
