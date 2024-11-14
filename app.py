@@ -163,4 +163,4 @@ def main():
     if len(features) < 5:  
         st.write("Not enough data available for prediction within the selected date range and indicator settings.")
     else:
-        X_train, X_test, y_train, y_test = train_test_split(features, target, test_size=0.2, random_state=
+        X_train, X_test, y_train, y_test = train_test_split(features, target, test_size=0.2, random_state=)
