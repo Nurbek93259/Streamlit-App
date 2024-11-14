@@ -163,4 +163,11 @@ def main():
     if len(features) < 5:  
         st.write("Not enough data available for prediction within the selected date range and indicator settings.")
     else:
-        X_train, X_test, y_train, y_test = train_test_split(features, target, test_size=0.2, random_state=)
+        X_train, X_test, y_train, y_test = train_test_split(features, target, test_size=0.2, random_state=42)
+        model = train_model(X_train, y_train)
+        accuracy = model.score(X_test, y_test)
+        
+        st.write(f"Prediction Model Accuracy: {accuracy:.2%}")
+
+if __name__ == "__main__":
+    main()
